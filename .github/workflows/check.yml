@@ -1,0 +1,14 @@
+# Every data and vector file matches MANIFEST.sha256 and parses as JSON.
+name: check
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sha256sum -c MANIFEST.sha256
+      - run: python3 -c 'import glob, json; [json.load(open(f, encoding="utf-8")) for f in glob.glob("data/*.json") + glob.glob("vectors/*.json")]'
+      - name: The manifest lists every data and vector file
+        run: diff <(ls data/*.json vectors/*.json | sort) <(awk '{print $2}' MANIFEST.sha256 | sort)
