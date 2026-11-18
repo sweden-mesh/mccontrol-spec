@@ -15,7 +15,7 @@ No code. Nothing here runs, connects or sends.
 | `data/commands.json` | the command table the apps offer: groups, kinds, choices, examples, read or write |
 | `data/denylist.json` | what never travels over the control plane, and the mesh road's allowance |
 | `data/cautions.json` | commands that get a warning before they are sent |
-| `data/results.json` | result codes and what each means to a person |
+| `data/results.json` | result codes and what each means to a person (`help`, every code, English; `help_sv` where a Swedish text exists) |
 | `data/protocol.json` | the protocol's constants: tags, limits, pads, topics, the mesh road's layout |
 | `data/firmware.json` | which firmware admits which command and speaks which envelope |
 | `data/facts.json` | how a reply becomes a fact about a node |
