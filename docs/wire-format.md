@@ -70,6 +70,14 @@ result   r3|{counter}|{b64url(ChaCha20-Poly1305("{code}|{command}|{reply}" zero-
 The sealed text is ciphertext followed by the 16-byte tag. The outer signature lets the broker
 drop junk before fan-out without reading the command; the node checks the tag. Broadcasts stay v1.
 
+**From lou-19 only a v2 command that ran is answered with an r3.** The result nonce is the
+counter, and a refusal (replay, expired, rate limited, not admitted) does not use the counter
+up, so an r3 for it could repeat the nonce of another r3 under the same counter. A refused v2
+command is answered with an r2 signed by the node whose `command` field is **empty**
+(`r2|{counter}|{code}||{sig}`), so the sealed command is never shown. A tool matches it by
+counter and takes the command from what it sent. Earlier firmware (ar-13 to lou-18) answers
+every v2 command with an r3.
+
 ## The mesh road: the same signature over LoRa (lou-19)
 
 A MeshCore anonymous request (`CMD_SEND_ANON_REQ`, 57) to the node's key, through the owner's
