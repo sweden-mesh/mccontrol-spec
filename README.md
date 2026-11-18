@@ -10,6 +10,7 @@ No code. Nothing here runs, connects or sends.
 
 | path | what |
 |---|---|
+| [`docs/wire-format-mcc3.md`](docs/wire-format-mcc3.md) | mcc3 (lou-20 on): `mcc/` topics keyed by the node, commands and results sealed node↔owner and signed inside, the mesh road's 0xC2 request, alive messages |
 | [`docs/wire-format.md`](docs/wire-format.md) | the envelope (v1 signed, v2 encrypted), the results (r1, r2, r3), the mesh road, the broker token, key registration, the key backup file |
 | `data/commands.json` | the command table the apps offer: groups, kinds, choices, examples, read or write |
 | `data/denylist.json` | what never travels over the control plane, and the mesh road's allowance |
@@ -21,6 +22,7 @@ No code. Nothing here runs, connects or sends.
 | `data/brokers.json`, `data/areas.json` | the default command broker, counties and their IATA codes |
 | `data/help.json` | the help topics both apps show |
 | `vectors/vectors.json` | fixed inputs and the exact outputs: envelopes, results, token, registration, the checks before signing, the mesh road |
+| `vectors/mcc3-vectors.json` | mcc3: keys, commands, results, mesh requests and responses, alive, and the refusals, byte for byte |
 | `vectors/key-backup-vectors.json` | a sealed key backup file and how it opens |
 | `MANIFEST.sha256` | SHA-256 of every data and vector file; consumers pin against it |
 
@@ -31,7 +33,7 @@ of them is on any node.
 
 - [mccontrol-cli](https://github.com/sweden-mesh/mccontrol-cli): the Python CLI and terminal
   interfaces. It is the reference implementation: `python -m mccontrol.webexport --out <this
-  clone>` writes `data/` and `vectors/vectors.json` from its code.
+  clone>` writes `data/`, `vectors/vectors.json` and `vectors/mcc3-vectors.json` from its code.
 - [mccontrol-web](https://github.com/sweden-mesh/mccontrol-web): the same tool in the browser,
   written in JavaScript; its tests run against these vectors.
 - mccontrol-spec (this repository): the contract between the two.
