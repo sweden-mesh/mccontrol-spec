@@ -10,19 +10,19 @@ No code. Nothing here runs, connects or sends.
 
 | path | what |
 |---|---|
-| [`docs/wire-format-mcc3.md`](docs/wire-format-mcc3.md) | mcc3 (lou-20 on): `mcc/` topics keyed by the node, commands and results sealed node↔owner and signed inside, the mesh road's 0xC2 request, alive messages |
+| [`docs/wire-format-mcc3.md`](docs/wire-format-mcc3.md) | mcc3 (lou-20 on): `mcc/` topics keyed by the node, commands and results sealed node↔owner and signed inside, the mesh road's 0xC2 request, forwards through a relay, alive messages |
 | [`docs/wire-format.md`](docs/wire-format.md) | the envelope (v1 signed, v2 encrypted), the results (r1, r2, r3), the mesh road, the broker token, key registration, the key backup file |
 | `data/commands.json` | the command table the apps offer: groups, kinds, choices, examples, read or write |
 | `data/denylist.json` | what never travels over the control plane, and the mesh road's allowance |
 | `data/cautions.json` | commands that get a warning before they are sent |
-| `data/results.json` | result codes and what each means to a person (`help`, every code, English; `help_sv` where a Swedish text exists) |
+| `data/results.json` | result codes and what each means to a person (`help`, every code, English; `help_sv` where a Swedish text exists); under `forward`, a relay's statuses and their texts |
 | `data/protocol.json` | the protocol's constants: tags, limits, pads, topics, the mesh road's layout |
 | `data/firmware.json` | which firmware admits which command and speaks which envelope |
 | `data/facts.json` | how a reply becomes a fact about a node |
 | `data/brokers.json`, `data/areas.json` | the default command broker, counties and their IATA codes |
 | `data/help.json` | the help topics both apps show |
 | `vectors/vectors.json` | fixed inputs and the exact outputs: envelopes, results, token, registration, the checks before signing, the mesh road |
-| `vectors/mcc3-vectors.json` | mcc3: keys, commands, results, mesh requests and responses, alive, and the refusals, byte for byte |
+| `vectors/mcc3-vectors.json` | mcc3: keys, commands, results, mesh requests and responses, forwards and their results, alive, and the refusals, byte for byte |
 | `vectors/key-backup-vectors.json` | a sealed key backup file and how it opens |
 | `MANIFEST.sha256` | SHA-256 of every data and vector file; consumers pin against it |
 
