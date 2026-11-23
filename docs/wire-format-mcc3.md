@@ -302,10 +302,9 @@ mesh response.
     (route 2, or route 1 on a relay with no region home).
 - A node's answers over the mesh road have the same airtime budget (5 %, then 1 %); it replaces
   one answer a minute. A request over the budget is not answered. The general command budget, on
-  every road, is 30 an hour from lou-20 (10 before): the 31st is answered `rate-limited`.
-- After a restart the first quarter of each airtime budget is a cooldown, and a relay's first
-  flood waits 300 s from the first forward asked for: the budgets are in RAM and `reboot` is a
-  command.
+  every road, is 50 an hour from lou-20 (10 before): the 51st is answered `rate-limited`.
+- The budgets are kept in RAM: a restart opens a burst. (A cooldown after every boot was built
+  and withdrawn on 2026-11-23: it surprises whoever has just installed or restarted a node.)
 - **A flooded request is answered 15 to 30 s after it arrives**, at random, once its copies have
   died down around the node; a direct one after 300 ms. A sender therefore waits 90 s for an
   answer over the mesh (a relay waits its 120 s).
