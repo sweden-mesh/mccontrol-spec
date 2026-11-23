@@ -174,6 +174,11 @@ answer, as any silence does.
 Not padded (airtime). The response keeps its tag: the node does not sign it. The companion that
 carries it cannot read it.
 
+MeshCore carries a datagram in whole 16-byte cipher blocks and hands it over zero-filled to the
+block edge, so a receiver may see up to 15 zero bytes after the tag (a 55-byte response arrives
+as 60). The opener tries the length it was handed, then drops one trailing zero byte at a time,
+at most 15: the tag says which length is the response.
+
 ## A forward through a relay (`mcc/cmd/<RELAY KEY>`)
 
 A **relay** is a node on MQTT that transmits its owner's mesh request to another node, the
