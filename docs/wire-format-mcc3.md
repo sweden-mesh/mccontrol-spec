@@ -235,7 +235,7 @@ The relay, in order:
 | forward counter above the last accepted one (kept in RAM; accepted here, before the body is judged) | `replay` |
 | body: length 132 and first byte `0xC2`, or length 74..132 and first byte `0xC1`; route 0, 1 or 2; a valid path length; the target is not the relay itself | `bad-body` |
 | no other forward waiting | `busy` |
-| budget: 10 forwards an hour, of which 2 floods | `rate-limited` |
+| budget: airtime left in the quarter, and for a flood its gap, the day's 100 and the hour's 2 wide ones (below) | `rate-limited` |
 | the request is built and queued | `send-failed` (no budget spent) |
 | a response from the target within 120 s | `no-answer` |
 
@@ -274,7 +274,7 @@ they apply to the request as to any mesh request.
 | 4 | `replay` | the forward counter was not above the last |
 | 5 | `bad-body` | the body, route, path or target was refused |
 | 6 | `busy` | another forward is waiting |
-| 7 | `rate-limited` | 10 an hour, 2 floods |
+| 7 | `rate-limited` | no airtime left for now, or a flood limit |
 | 8 | `clock-unset` | the relay has no time yet |
 | 9 | `send-failed` | no packet could be built or queued |
 
@@ -290,10 +290,22 @@ mesh response.
 
 - `set mqtt.relay off|own`, `get mqtt.relay`. Default `own`, on Observer images with the plane;
   other images do not know the setting. An ordinary command: not on the deny list.
-- `get mqtt.relay` answers `> own, forwarded <n>, answered <n>, refused <n>, <n> of 10 left this
-  hour (<n> of 2 floods)`, or `> off`.
-- Fixed: 10 forwards an hour of which 2 floods, one waiting at a time, a 120 s wait, a 300 s
-  expiry window.
+- `get mqtt.relay` answers `> own, forwarded <n>, answered <n>, refused <n>, <idle|burst|cooldown>,
+  <s.s> s airtime left, floods today <n> of 100`, or `> off`.
+- Fixed: one forward waiting at a time, a 120 s wait, a 300 s expiry window, and the budget:
+  - **Airtime** (operator 2026-11-23). The first request opens a burst of 15 minutes in which the
+    relay's requests may fill 5 % of the time (45 s on the air), the 15 minutes after it hold 1 %
+    (9 s), and the request after that opens the next burst. Counted in the radio's own estimate
+    for each request; the request that crosses the line is the last one sent.
+  - **Floods**, which cost every repeater that hears them: at least 60 s apart in a burst and
+    300 s in a cooldown, 100 in a day, and 2 an hour for those that leave the relay's region home
+    (route 2, or route 1 on a relay with no region home).
+- A node's answers over the mesh road have the same airtime budget (5 %, then 1 %); it replaces
+  one answer a minute and ten an hour. A request over the budget is not answered.
+- `get sensors` (lou-20, both roads, mesh-only images too) answers one line of at most 125 bytes:
+  `> batt=3881mV mcu=21.5C temp=23.5C hum=40.5% temp/2=-4.5C`. `batt` and `mcu` are the board's;
+  the rest is what its sensors report, with the channel after a slash when it is not the node's
+  own. No position. `get stats` is answered on a mesh-only image too.
 
 ## Alive (`mcc/alive/<KEY>`, retained)
 
