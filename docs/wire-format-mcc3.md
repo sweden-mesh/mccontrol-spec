@@ -301,7 +301,25 @@ mesh response.
     300 s in a cooldown, 100 in a day, and 2 an hour for those that leave the relay's region home
     (route 2, or route 1 on a relay with no region home).
 - A node's answers over the mesh road have the same airtime budget (5 %, then 1 %); it replaces
-  one answer a minute and ten an hour. A request over the budget is not answered.
+  one answer a minute. A request over the budget is not answered. The general command budget, on
+  every road, is 30 an hour from lou-20 (10 before): the 31st is answered `rate-limited`.
+- After a restart the first quarter of each airtime budget is a cooldown, and a relay's first
+  flood waits 300 s from the first forward asked for: the budgets are in RAM and `reboot` is a
+  command.
+- **A flooded request is answered 15 to 30 s after it arrives**, at random, once its copies have
+  died down around the node; a direct one after 300 ms. A sender therefore waits 90 s for an
+  answer over the mesh (a relay waits its 120 s).
+- **The way back.** The answer to a flooded request is a flooded path return. Whoever receives it
+  sends MeshCore's reciprocal path direct to the node: the path the answer took. A relay does so
+  (counted in its airtime budget); a companion does of its own accord. The node listens to a
+  sender for it for five minutes after answering, keeps the path in RAM for the three senders
+  answered last, and answers their later direct requests along it. With no such path the answer
+  to a direct request is flooded in the node's default scope. A direct command that stays
+  unanswered is cured by one flooded command, whose answer renews the path both ways.
+- A request answered with a refusal is remembered by its counter until the next restart, and
+  is not answered a second time.
+- A release candidate's revision ends in `rc` or `rcN`: `v1.18.0-lou-20rc`, and in a version
+  string `-lou-20rc-arrc-`. It is revision 20; the feature token is the one after it.
 - `get sensors` (lou-20, both roads, mesh-only images too) answers one line of at most 125 bytes:
   `> batt=3881mV mcu=21.5C temp=23.5C hum=40.5% temp/2=-4.5C`. `batt` and `mcu` are the board's;
   the rest is what its sensors report, with the channel after a slash when it is not the node's
