@@ -9,7 +9,7 @@ rebuilds every vector byte for byte from its inputs and gives every refusal its 
 Notation: `‖` is concatenation; hex is upper case; every integer is **little-endian**;
 `b64url` is base64url without padding. `KEY` is the node's 32-byte Ed25519 public key as 64
 upper-case hex characters. The owner's **command key** is the Ed25519 key the node holds in
-`mqtt.cmd.pubkey`; exactly one per node.
+`cmd.pubkey`; exactly one per node.
 
 ## Topics
 
@@ -136,7 +136,7 @@ The keystream is RFC 8439 ChaCha20 under `K_mesh`, nonce `00 × 8 ‖ counter`, 
 counter 1**: exactly ChaCha20-Poly1305's ciphertext with its tag dropped, so every library that
 has the AEAD has this too. The node reads the first 136 bytes of the decrypted datagram.
 
-The node, in order, all silent: `0xC2`, plane on, `mqtt.cmd.mesh` not off; flags 0 or `0x02`
+The node, in order, all silent: `0xC2`, plane on, `cmd.mesh` not off; flags 0 or `0x02`
 (`bad-version`); a command key set; counter above the last accepted (`replay`, before any
 decryption); decrypt; the field ends in 0 and holds a valid 1..57-byte command (`command-chars`);
 the signature (`sig-invalid`); the mesh answer budget. Answered from there: road open (else
@@ -229,7 +229,7 @@ The relay, in order:
 | a command key set | silent, `no-owner-key` |
 | the AEAD opens under `K_fwd` | silent, `sig-invalid` |
 | *authentic: every outcome from here is answered on `mcc/r/<RID>`* | |
-| `mqtt.relay` is `own` | status `off` |
+| `relay` is `own` | status `off` |
 | the clock is set | `clock-unset` |
 | now ≤ expiry ≤ now + 300 | `expired` |
 | forward counter above the last accepted one (kept in RAM; accepted here, before the body is judged) | `replay` |
@@ -269,7 +269,7 @@ they apply to the request as to any mesh request.
 |---|---|---|
 | 0 | `answered` | the response is in the result |
 | 1 | `no-answer` | sent, nothing came back in 120 s. **Not a refusal**: the target may have run the command |
-| 2 | `off` | `mqtt.relay off` |
+| 2 | `off` | `relay off` |
 | 3 | `expired` | the expiry has passed, or is more than 300 s ahead |
 | 4 | `replay` | the forward counter was not above the last |
 | 5 | `bad-body` | the body, route, path or target was refused |
@@ -288,9 +288,9 @@ mesh response.
 
 ## Relay settings
 
-- `set mqtt.relay off|own`, `get mqtt.relay`. Default `own`, on Observer images with the plane;
+- `set relay off|own`, `get relay`. Default `own`, on Observer images with the plane;
   other images do not know the setting. An ordinary command: not on the deny list.
-- `get mqtt.relay` answers `> own, forwarded <n>, answered <n>, refused <n>, <idle|burst|cooldown>,
+- `get relay` answers `> own, forwarded <n>, answered <n>, refused <n>, <idle|burst|cooldown>,
   <s.s> s airtime left, floods today <n> of 100`, or `> off`.
 - Fixed: one forward waiting at a time, a 120 s wait, a 300 s expiry window, and the budget:
   - **Airtime** (operator 2026-11-23). The first request opens a burst of 15 minutes in which the
@@ -343,8 +343,8 @@ mesh response.
 | 12 | 4 | node clock, 0 unset |
 | 16 | 4 | last accepted command counter |
 | 20 | 4 | alive interval in force, seconds |
-| 24 | 1 | flags: bit 0 old scheme still accepted (lou-20), bit 1 Observer uplink build, bit 2 auto-reply build, bit 3 clock set, bit 4 relaying is on (`mqtt.relay own`, on an image that can relay) |
-| 25 | 1 | `mqtt.cmd.mesh`: 0 off, 1 on, 2 auto |
+| 24 | 1 | flags: bit 0 old scheme still accepted (lou-20), bit 1 Observer uplink build, bit 2 auto-reply build, bit 3 clock set, bit 4 relaying is on (`relay own`, on an image that can relay) |
+| 25 | 1 | `cmd.mesh`: 0 off, 1 on, 2 auto |
 | 26 | 4 | command-key fingerprint: its first 4 bytes |
 | 30 | 1 | key set via: 0 USB, 1 admin login |
 | 31 | 1 | reserved, 0 |
@@ -378,3 +378,14 @@ will: offline. A higher `(boot counter, sequence)` replaces a lower one.
 | `alive` | two alive messages and their opened fields |
 | `refusals` | a bit flipped in each region of each message, flags that are refused, the wrong node, the wrong owner, the wrong road in the signature, a replay, a forward's body, route, path and target rules, with the outcome |
 | `not_built` | commands a sender must refuse before signing |
+
+## lou-20rc: the settings' names, and a clock step over the mesh
+
+From lou-20 the plane's settings are `cmd` (`set cmd on [<host>]|off`, `get cmd`), `cmd.pubkey`,
+`cmd.slot`, `cmd.mesh`, `cmd.debug`, `cmd ping`, and relaying is `relay` (`set relay off|own`,
+`get relay`). The names before lou-20 (`mqtt.cmd.*`, `mqtt.relay`) are unknown to it; nodes on
+lou-19 and older know only those. Stored settings carry over unchanged: the names are not stored.
+
+The mesh road admits `time <epoch>` (ten digits): the node steps its clock forward to it when the
+time is at or before the command's own expiry by 3600 s at most, judged without the node's clock.
+Over MQTT `time` stays denied.
