@@ -1,7 +1,7 @@
 # mccontrol-spec
 
 The part of mccontrol that is the same in every implementation: the wire format of the signed
-command plane for MeshCore Observer repeaters, the tables both apps act on, and test vectors
+command plane for MeshCore repeaters running lou firmware, the tables both apps act on, and test vectors
 that prove an implementation gives byte-identical results.
 
 No code. Nothing here runs, connects or sends.

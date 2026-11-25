@@ -379,7 +379,7 @@ will: offline. A higher `(boot counter, sequence)` replaces a lower one.
 | `refusals` | a bit flipped in each region of each message, flags that are refused, the wrong node, the wrong owner, the wrong road in the signature, a replay, a forward's body, route, path and target rules, with the outcome |
 | `not_built` | commands a sender must refuse before signing |
 
-## lou-20rc: the settings' names, and a clock step over the mesh
+## lou-20: the settings' names, and a clock step over the mesh
 
 From lou-20 the plane's settings are `cmd` (`set cmd on [<host>]|off`, `get cmd`), `cmd.pubkey`,
 `cmd.slot`, `cmd.mesh`, `cmd.debug`, `cmd ping`, and relaying is `relay` (`set relay off|own`,
