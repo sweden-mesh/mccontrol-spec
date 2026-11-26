@@ -10,6 +10,7 @@ No code. Nothing here runs, connects or sends.
 
 | path | what |
 |---|---|
+| [`docs/protocol.md`](docs/protocol.md) | the whole protocol in one document, for building compatible firmware, a tool or a command server: roles, keys, every message, the node's checks and budgets, the relay, a conformance checklist, worked examples |
 | [`docs/wire-format-mcc3.md`](docs/wire-format-mcc3.md) | mcc3 (lou-20 on): `mcc/` topics keyed by the node, commands and results sealed node↔owner and signed inside, the mesh road's 0xC2 request, forwards through a relay, alive messages |
 | [`docs/wire-format.md`](docs/wire-format.md) | the envelope (v1 signed, v2 encrypted), the results (r1, r2, r3), the mesh road, the broker token, key registration, the key backup file |
 | `data/commands.json` | the command table the apps offer: groups, kinds, choices, examples, read or write |
