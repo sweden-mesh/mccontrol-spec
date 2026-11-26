@@ -1560,5 +1560,6 @@ settings carried over. `docs/wire-format.md` describes the older scheme.
 
 ## 22. Licence
 
-**TODO (operator): choose the licence for this document and state it here.** None has been
-chosen for it.
+The text of this document is licensed under Creative Commons Attribution 4.0 International
+(CC BY 4.0, https://creativecommons.org/licenses/by/4.0/). The data files and test vectors in
+this repository are under the MIT licence, see [LICENSE](../LICENSE).

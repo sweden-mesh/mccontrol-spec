@@ -56,4 +56,4 @@ what a node accepts; this repository follows it.
 
 ## Licence
 
-MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE). The text of [docs/protocol.md](docs/protocol.md) is CC BY 4.0.
