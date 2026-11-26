@@ -233,7 +233,7 @@ The relay, in order:
 | the clock is set | `clock-unset` |
 | now ≤ expiry ≤ now + 300 | `expired` |
 | forward counter above the last accepted one (kept in RAM; accepted here, before the body is judged) | `replay` |
-| body: length 132 and first byte `0xC2`, or length 74..132 and first byte `0xC1`; route 0, 1 or 2; a valid path length; the target is not the relay itself | `bad-body` |
+| body: length 132 and first byte `0xC2`, or (a lou-20 relay only; from lou-21 this too is `bad-body`) length 74..132 and first byte `0xC1`; route 0, 1 or 2; a valid path length; the target is not the relay itself | `bad-body` |
 | no other forward waiting | `busy` |
 | budget: airtime left in the quarter, and for a flood its gap, the day's 100 and the hour's 2 wide ones (below) | `rate-limited` |
 | the request is built and queued | `send-failed` (no budget spent) |
@@ -285,6 +285,9 @@ The owner tries the `K_fwd` of each relay it awaits on this RID when the kind is
 the forward counter, then reads the response exactly as a companion's: put four zero bytes in
 front and open a `0xC2` response under the **target's** `K_cmd`; read a `0xC1` response as the v1
 mesh response.
+
+mccontrol-cli and mccontrol-web build a forward with a `0xC2` body only, and refuse the relay road
+to a target older than lou-20 before anything is sent.
 
 ## Relay settings
 
@@ -373,7 +376,7 @@ will: offline. A higher `(boot counter, sequence)` replaces a lower one.
 | `results` | MQTT results: a success, an answered refusal, a reply cut to 512 |
 | `mesh_requests` | the 136 bytes and the 132 the app sends, the plaintext, the signature; V3z is V3 with flags `0x02` |
 | `mesh_responses` | a sealed mesh response |
-| `forwards` | F1 (direct, no hops, V3z as its body) and F2 (a flood, a `0xC1` body of 81 bytes): every field, the payload, and what the relay opens. The node of the vectors is the relay, the second node the target |
+| `forwards` | F1 (direct, no hops, V3z as its body) and F2 (a flood, a `0xC1` body of 81 bytes, which a lou-20 relay sends and a relay from lou-21 answers `bad-body`): every field, the payload, and what the relay opens. The node of the vectors is the relay, the second node the target |
 | `forward_results` | F3 (answered, V4 as its response) and F4 (no answer, a taught path) |
 | `alive` | two alive messages and their opened fields |
 | `refusals` | a bit flipped in each region of each message, flags that are refused, the wrong node, the wrong owner, the wrong road in the signature, a replay, a forward's body, route, path and target rules, with the outcome |
