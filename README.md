@@ -25,6 +25,7 @@ No code. Nothing here runs, connects or sends.
 | `vectors/vectors.json` | fixed inputs and the exact outputs: envelopes, results, token, registration, the checks before signing, the mesh road |
 | `vectors/mcc3-vectors.json` | mcc3: keys, commands, results, mesh requests and responses, forwards and their results, alive, and the refusals, byte for byte |
 | `vectors/key-backup-vectors.json` | a sealed key backup file and how it opens |
+| `vectors/malive-vectors.json` | lou-21: the announce of a node without Wi-Fi and the heard entry an Observer node publishes for it, with their keys, opened fields and refusals. Written by the firmware's `scripts/malive-vectors.py` and copied here unchanged |
 | `MANIFEST.sha256` | SHA-256 of every data and vector file; consumers pin against it |
 
 Every key and seed in the vectors is made from a fixed phrase or a counting byte sequence. None

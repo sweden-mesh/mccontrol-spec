@@ -21,7 +21,7 @@ error. Section 20 lists the places where the sources it was written from differ 
 9. Budgets
 10. The clock
 11. Answering over the mesh
-12. The alive message
+12. The alive message, and the announce of a node without a connection
 13. Replacing the command key: `rekey`
 14. What may be sent: the deny list
 15. The relay
@@ -114,12 +114,25 @@ K_fwd    = HKDF-SHA256(ikm S, salt empty, info "mcc3/fwd/"   ‖ KEY, 32 bytes)
 HKDF is RFC 5869. An empty salt is 32 zero bytes. `info` is ASCII, and `KEY` in it is the
 node's own key as 64 upper-case hex characters. For `K_fwd`, `KEY` is the relay's key.
 
+From lou-21 there are two more, made the same way, for a node without an MQTT connection
+(12.4 to 12.6):
+
+```
+K_malive = HKDF-SHA256(ikm S, salt empty, info "mcc3/malive/" ‖ KEY, 32 bytes)
+K_heard  = HKDF-SHA256(ikm S, salt empty, info "mcc3/heard/"  ‖ KEY, 32 bytes)
+```
+
+For `K_malive`, `S` and `KEY` are those of the node that announces. For `K_heard` they are those
+of the Observer node that caught the announce.
+
 | key | used for | cipher | nonce |
 |---|---|---|---|
 | `K_cmd` | commands and results on MQTT, responses on the mesh road | ChaCha20-Poly1305 | 12 random bytes, carried in clear |
 | `K_mesh` | requests on the mesh road | ChaCha20, **no tag** | `00 × 8 ‖ counter (u32)`, not carried |
 | `K_alive` | alive messages | ChaCha20-Poly1305 | 12 random bytes, carried in clear |
 | `K_fwd` | forwards to a relay and their results | ChaCha20-Poly1305 | 12 random bytes, carried in clear |
+| `K_malive` | the announce of a node without a connection | ChaCha20-Poly1305, tag cut to 8 bytes | `00 × 4 ‖ boot counter (u32) ‖ sequence (u32)`, both carried in clear |
+| `K_heard` | heard entries | ChaCha20-Poly1305 | 12 random bytes, carried in clear |
 
 A node derives the keys once per command key and keeps them in RAM. It derives them again
 when the command key changes.
@@ -132,6 +145,9 @@ when the command key changes.
   replayed or rate-limited command without taking a new counter.
 - On the mesh road the nonce is made from the counter. A sender MUST use one mesh counter for
   exactly one request content. A resend sends the same 136 bytes.
+- An announce's nonce is made from the boot counter and the sequence. A node MUST raise the
+  sequence for every announce, and the boot counter at every boot, so that no nonce is used
+  twice under `K_malive`.
 
 ## 4. Topics
 
@@ -141,6 +157,7 @@ when the command key changes.
 | `mcc/r/<RID>` | any token login | a subscriber to that exact topic | 1 | no | a sealed result or a sealed forward result |
 | `mcc/alive/<KEY>` | the node `KEY` only | anyone; `mcc/alive/+` is allowed | 1 | **yes** | a sealed alive message, or empty |
 | `mcc/ping/<KEY>` | the node `KEY` only | nobody; the command server consumes it | 1 | no | `ping\|<8 hex>` |
+| `mcc/heard/<KEY>/<SLOT>` | the node `KEY` only | anyone; `mcc/heard/+/+` and `mcc/heard/<KEY>/+` are allowed | 1 | **yes** | a sealed heard entry (12.5), or empty. `SLOT` is 0 to 15, in decimal. From lou-21 |
 
 - `RID`, the reply id, is 16 random bytes written as 32 upper-case hex characters. The owner's
   tool draws one per session with the command server. It travels only inside a sealed command
@@ -580,7 +597,9 @@ direction only, the answer is lost although the command ran.
 
 ## 12. The alive message
 
-An alive message is how an owner finds its nodes. It is the only discovery there is.
+An alive message is how an owner finds its nodes that have an MQTT connection. A node without
+one sends no alive message. From lou-21 it announces itself over the mesh, and an Observer node
+of the same owner publishes what it caught (12.4 to 12.6). There is no other discovery.
 
 ### 12.1 Layout, kind `A`, on `mcc/alive/<KEY>`, retained
 
@@ -641,8 +660,112 @@ open is another owner's, or was sealed to a command key the node no longer has. 
 payload** is the will: the node is offline. A message with a higher `(boot counter, sequence)`
 replaces a lower one. A lower one is a stale copy.
 
-A node without an MQTT connection sends no alive message. Its owner adds it to a tool by its
-public key.
+A node without an MQTT connection sends no alive message. Up to lou-20 its owner adds it to a
+tool by its public key. From lou-21 it announces itself.
+
+### 12.4 The announce, kind `M`, flooded over the mesh (lou-21)
+
+A node without an MQTT connection that has a command key, the plane on and a region sends an
+announce. It is the payload of one `ANON_REQ` packet, flooded inside the node's region home,
+or its default region when it has no home. A node with neither does not announce. Repeaters
+forward it as they forward any `ANON_REQ` flood. They do not read it.
+
+Always **101 bytes**:
+
+| offset | size | field |
+|---|---|---|
+| 0 | 1 | the first byte of the node's key (where `ANON_REQ` has its destination hash) |
+| 1 | 32 | the node's key (where `ANON_REQ` has its sender), AAD |
+| 33 | 1 | kind `0x4D` (`M`), AAD |
+| 34 | 4 | owner tag: `SHA-256("mcc3/own\|" ‖ command key ‖ node key ‖ boot counter ‖ sequence)[0:4]`, AAD |
+| 38 | 4 | boot counter, AAD |
+| 42 | 4 | sequence since boot, from 1, AAD |
+| 46 | 47 | sealed with `K_malive`, see below |
+| 93 | 8 | the first 8 bytes of the Poly1305 tag |
+
+The nonce is `00 × 4 ‖ boot counter ‖ sequence`. The associated data is bytes 1 to 45. The
+sealed part, zero-padded to 47:
+
+| offset | size | field |
+|---|---|---|
+| 0 | 4 | uptime, seconds |
+| 4 | 4 | node clock (10.3) |
+| 8 | 4 | the stored command counter |
+| 12 | 1 | flags, as in the alive message (12.1) |
+| 13 | 2 | battery, millivolts. 0 when the board cannot read it |
+| 15 | 1 + n | firmware version: length, then n ≤ 14 bytes |
+| … | 1 + n | node name: length, then n ≤ 16 bytes, cut |
+
+- The owner tag lets an Observer node keep the announces made for its own command key. Anyone
+  who knows the owner's public command key can make a tag. The tag proves nothing: only the
+  owner, who opens the seal, knows that an announce is real.
+- A node sends one 5 to 60 s after it starts, after the command key is set and after the plane
+  is switched on, and then every 23 hours with a spread of one tenth either way. A node with
+  an MQTT connection never sends one.
+- The announce is about 1 s on the air at SF8, 62.5 kHz, CR 4:8. The node counts it in the
+  airtime budget of its answers over the mesh (9.2).
+
+### 12.5 The heard entry, kind `H`, on `mcc/heard/<KEY>/<SLOT>`, retained (lou-21)
+
+An Observer node with a command key and the plane on looks at every flooded `ANON_REQ` of
+exactly 101 bytes with `0x4D` at offset 33, before it forwards it. It keeps those whose owner
+tag is its own command key's, in a table of 16 nodes, one entry per announced node key. An
+announce with a higher `(boot counter, sequence)` replaces a node's entry. A lower or equal one
+is dropped. It publishes each entry on `mcc/heard/<its own key>/<slot>`:
+
+| offset | size | field |
+|---|---|---|
+| 0 | 1 | kind `0x48` (`H`), AAD |
+| 1 | 12 | nonce, random, AAD |
+| 13 | 112 | sealed with `K_heard`, see below |
+| 125 | 16 | Poly1305 tag |
+
+Always **141 bytes, 188 characters**. The sealed part:
+
+| offset | size | field |
+|---|---|---|
+| 0 | 32 | the announced node's key |
+| 32 | 68 | the announce from its kind byte to its tag: bytes 33 to 100 of 12.4 |
+| 100 | 4 | when the announce was heard, by the Observer node's clock. 0 while that clock is unset |
+| 104 | 1 | its SNR, signed, in quarter dB |
+| 105 | 1 | the hops it had travelled |
+| 106 | 4 | when the node's last advert was heard. 0: none |
+| 110 | 1 | that advert's SNR, signed, in quarter dB |
+| 111 | 1 | that advert's hops |
+
+- lou-21 leaves the three advert fields zero.
+- The Observer node admits at most 4 node keys new to its table in an hour, and publishes at
+  most one entry in 90 s. A full table drops the node heard longest ago and empties its slot.
+- A changed command key empties the table and all 16 slots. The node's will does not empty
+  them, and nor does a restart: what was heard stays true.
+- The slot, and not the announced node's key, is in the topic. The command server sees how
+  many announces a node has caught and not whose.
+
+### 12.6 Reading the heard entries
+
+The owner's tool reads the retained `mcc/heard/<KEY>/+` of each Observer node whose alive
+message opened with the owner's key. Nothing is sent, and no airtime is used. For each entry:
+
+1. Derive `K_heard` from the owner's key and the Observer node's key and open the entry. One
+   that does not open is dropped.
+2. Build the announce again: the first byte of the announced node's key, then the first 100
+   bytes of the sealed part.
+3. Compute the owner tag from the owner's own command key and compare it with bytes 34 to 37.
+4. Derive `K_malive` from the owner's key and the **announced** node's key. Decrypt the 47
+   bytes, compute the Poly1305 tag over the associated data and the ciphertext as RFC 8439
+   does, and compare its first 8 bytes with bytes 93 to 100. An announce that fails step 3 or
+   4 is dropped. A tool MUST NOT show an announce it has not verified.
+5. Several Observer nodes may hold the same node. The entry with the highest
+   `(boot counter, sequence)` is kept.
+
+A forged announce can take a slot in an Observer node's table. It never opens in step 4, so it
+never becomes a node in a tool. The battery reading is as old as the announce: the tool shows
+it with the time the announce was heard.
+
+Known weaknesses, left as they are: someone who knows the owner's public command key and a
+node's key can forge an announce with a very high boot counter, after which an Observer node
+ignores that node's real announces until it restarts. A node that loses its stored boot
+counter uses `(boot counter, sequence)` nonces again under the same key.
 
 ## 13. Replacing the command key: `rekey`
 
@@ -961,16 +1084,17 @@ For a login with key `K`:
 | let `K` publish **retained** to `mcc/alive/K`, and set a will there | alive messages |
 | let any token login subscribe to `mcc/alive/+` or `mcc/alive/<any key>` and receive the retained messages | discovery |
 | answer `ping\|<8 hex>` on `mcc/ping/K` from `K` with `pong\|<the same>` on `mcc/cmd/K`, published by the server itself | 4.1 |
+| let `K` publish **retained** to `mcc/heard/K/<0 to 15>`, and let any token login subscribe to `mcc/heard/+/+`, `mcc/heard/<any key>/+` or one slot and receive the retained messages | heard entries (12.5), from lou-21. A server without this rule refuses the publish, and nothing else changes |
 | pass payloads unchanged | |
 
 | the server MUST NOT | why |
 |---|---|
 | deliver `mcc/cmd/K` to any login but `K`, or allow `mcc/cmd/+`, `mcc/#` or any wildcard over commands | who commands whom stays private |
 | allow a wildcard over `mcc/r/` | a result's topic is known only to the two ends |
-| let a login write `mcc/alive/` or `mcc/ping/` for another key | an alive message must be the node's own |
+| let a login write `mcc/alive/`, `mcc/heard/` or `mcc/ping/` for another key | an alive message or a heard entry must be the node's own |
 | deliver a ping to any subscriber | the nonce is what a forged pong would need |
 | accept a payload that starts with `pong\|` on `mcc/cmd/` from a client | only the server answers a ping |
-| retain anything but an alive message | a retained command would be replayed at every connect |
+| retain anything but an alive message or a heard entry | a retained command would be replayed at every connect |
 | need to open a message, check a signature or keep a list of owners | the plane is blind by design |
 
 ### 16.3 What mcbroker adds
@@ -979,7 +1103,8 @@ These are one implementation's choices. They protect the server and are not need
 compatibility. A client SHOULD stay inside them.
 
 - **Shape checks without opening.** `mcc/cmd/` takes 243 or 371 b64url characters; `mcc/r/`
-  380 or 722; `mcc/alive/` 252, or empty; `mcc/ping/` exactly `ping|` and 8 hex characters.
+  380 or 722; `mcc/alive/` 252, or empty; `mcc/ping/` exactly `ping|` and 8 hex characters;
+  `mcc/heard/` at most 256, or empty, and 60 writes an hour for one key.
 - **Commands on the TLS listener only.** A token read off a plaintext connection cannot be used
   to publish commands.
 - **Password logins get nothing under `mcc/`.** Only token logins use the plane.
@@ -1310,6 +1435,73 @@ MSQDh8eFtP_Cj0QzPC5tKj4E
 
 The flags byte `0B` is bits 0, 1 and 3. Bit 0 was set by lou-20 only; a lou-21 node with the same state writes `0A`. The vector `relaying on: flags bit 4` is the same node with `relay own` and sequence 2 (flags `1B`).
 
+### 17.9 Announce, kind `M`, and heard entry, kind `H` (vectors `A1` and `H1`)
+
+These two are in `vectors/malive-vectors.json`, which the firmware's own generator writes. The
+owner is the command key of 17.1, the announcing node is the node of 17.1, and the Observer
+node that catches the announce is the other node of `vectors/mcc3-vectors.json`:
+
+| | value |
+|---|---|
+| the Observer node's key | `DDE3BCCEC7F3A66A1115F45D720F4DC135C3AE7C4E22DCA38FDB1EFD6A495FF8` |
+| `S` of the owner and the Observer node | `8171BE74044A30F63D1390528BF6564DF65AD546E0F69864ABF3B718E984462B` |
+| `K_malive` of the announcing node | `2968EE3BC0DE469759ADCB36CE66599684F33FD1FCE85AAB69F9F2E76E18BDCE` |
+| `K_heard` of the Observer node | `F6D3863ECDBEA0FF4A22A558093FF9E98940AA0E43F3E93E1A7951D15B186E46` |
+
+The announce: boot 7, sequence 1, uptime 42 s, clock 1795000000, last counter 12, flags `0C`,
+battery 3987 mV, version `lou-21-arrc`. The sealed part (47 bytes):
+
+| offset | size | field | bytes |
+|---|---|---|---|
+| 0 | 4 | uptime | `2A000000` |
+| 4 | 4 | node clock | `C086FD6A` |
+| 8 | 4 | last command counter | `0C000000` |
+| 12 | 1 | flags | `0C` |
+| 13 | 2 | battery, 3987 mV | `930F` |
+| 15 | 12 | version: length, then `lou-21-arrc` | `0B6C6F752D32312D61727263` |
+| 27 | 1 | node name: length | `0F` |
+| 28 | 15 | node name | 15 bytes, the vector's `fields.name` |
+| 43 | 4 | padding to 47 | `00` × 4 |
+
+The announce (101 bytes):
+
+| offset | size | field | bytes |
+|---|---|---|---|
+| 0 | 1 | the key's first byte | `4F` |
+| 1 | 32 | the node's key | `4FD099CCD47D7893` … `1C465BE33CBE65C4` |
+| 33 | 1 | kind | `4D` |
+| 34 | 4 | owner tag | `86B8A37F` |
+| 38 | 4 | boot counter | `07000000` |
+| 42 | 4 | sequence | `01000000` |
+| 46 | 47 | ciphertext | `0A8929E75030C7B6` … `ACA1BD1D6715D3F7` |
+| 93 | 8 | the tag's first 8 bytes | `C52A87DDAC809D1B` |
+
+The nonce is `000000000700000001000000`. The whole Poly1305 tag is `C52A87DDAC809D1B7A90A1ABE5DB5C79`; its last 8 bytes
+are not sent.
+
+The heard entry: slot 0, heard at 1795000050, SNR −22 quarter dB (−5.5 dB), 2 hops, no advert,
+nonce `505152535455565758595A5B`. The sealed part (112 bytes):
+
+| offset | size | field | bytes |
+|---|---|---|---|
+| 0 | 32 | the announced node's key | `4FD099CCD47D7893` … `1C465BE33CBE65C4` |
+| 32 | 68 | the announce, bytes 33 to 100 | `4D86B8A37F070000` … `C52A87DDAC809D1B` |
+| 100 | 4 | heard at | `F286FD6A` |
+| 104 | 1 | SNR | `EA` |
+| 105 | 1 | hops | `02` |
+| 106 | 6 | the advert's three fields | `00` × 6 |
+
+The MQTT payload (188 characters), published retained on
+`mcc/heard/DDE3BCCEC7F3A66A1115F45D720F4DC135C3AE7C4E22DCA38FDB1EFD6A495FF8/0`:
+
+```
+SFBRUlNUVVZXWFlaW_gfP-foM1GH6V_qX-TxYYPoscEpArc4XkgUduqPcDZTedzHWTWVtR1ff9XJ
+yxU2vFDHZ6XzbxpRrkO2wlSrU8XyzDhn2OvNxBSKZQyk0tZYZzsj9qKMm3r7QLrW5JA5FyYnTpH5
+A29FJLe4rbLGRNREjA8biEVmnkjOXjaKUazp
+```
+
+The vector's `refusals` are announces a tool or an Observer node must drop, each with the reason.
+
 ## 18. Conformance checklist
 
 An implementation is compatible when it passes every item that applies to its role. "Vector"
@@ -1461,10 +1653,14 @@ alone cannot pin; they must be tested against the rules of the section named.
     above the last one it used for that node.
 56. Treat `no-answer` and every silence as "unknown", never as "refused".
 57. Never set flags `0x02` in a request sent through a companion (11.3).
+58. When it reads heard entries: open each as in 12.6, drop one whose entry, owner tag or
+    announce does not verify, and keep the highest `(boot counter, sequence)` per node.
+    Vectors, in `vectors/malive-vectors.json`: `heard` and `announces` open to their `opened`
+    fields, and every entry under `refusals` is dropped.
 
 ### 18.4 What a command server MUST do
 
-58. Keep every rule of section 16.2.
+59. Keep every rule of section 16.2.
 
 ### 18.5 Not required
 
@@ -1483,6 +1679,9 @@ implementation may do them differently or not at all.
 - **The size of the arrivals queue** (four).
 - **`get stats` and `get sensors`** as commands, and the auto-reply feature and its
   `trigger` commands.
+- **The announce and the heard entry** (12.4 to 12.6). A node that does not announce is added
+  to a tool by its key. A node or a tool that does take part keeps the layouts and the checks
+  given there.
 - **The settings file layout** on the node.
 - **The owner's bookkeeping**: how a tool stores counters, keys and history, and its waiting
   times (20 s on MQTT, 90 s through a companion, 135 s for a forward).
@@ -1557,6 +1756,9 @@ that was signed and not encrypted. lou-20 accepts both schemes. lou-21 accepts m
 subscribes to nothing under `meshcore/` for commands, and it drops a `0xC1` request without an
 answer. The setting names changed from `mqtt.cmd…` to `cmd…` in lou-20, with the stored
 settings carried over. `docs/wire-format.md` describes the older scheme.
+
+lou-21 adds the announce of a node without an MQTT connection and the heard entry (12.4 to
+12.6, spec v0.5.0). A lou-20 node sends neither and reads neither.
 
 ## 22. Licence
 
