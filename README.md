@@ -11,7 +11,7 @@ No code. Nothing here runs, connects or sends.
 | path | what |
 |---|---|
 | [`docs/protocol.md`](docs/protocol.md) | the whole protocol in one document, for building compatible firmware, a tool or a command server: roles, keys, every message, the node's checks and budgets, the relay, a conformance checklist, worked examples |
-| [`docs/wire-format-mcc3.md`](docs/wire-format-mcc3.md) | mcc3 (lou-20 on): `mcc/` topics keyed by the node, commands and results sealed node↔owner and signed inside, the mesh road's 0xC2 request, forwards through a relay, alive messages |
+| [`docs/wire-format-mcc3.md`](docs/wire-format-mcc3.md) | mcc3 (lou-20 on): `mcc/` topics keyed by the node, commands and results sealed node↔owner and signed inside, the mesh road's 0xC2 request, forwards through a relay and guest forwards through anyone's, alive messages, the shared node store |
 | [`docs/wire-format.md`](docs/wire-format.md) | the envelope (v1 signed, v2 encrypted), the results (r1, r2, r3), the mesh road, the broker token, key registration, the key backup file |
 | `data/commands.json` | the command table the apps offer: groups, kinds, choices, examples, read or write |
 | `data/denylist.json` | what never travels over the control plane, and the mesh road's allowance |
@@ -23,9 +23,9 @@ No code. Nothing here runs, connects or sends.
 | `data/brokers.json`, `data/areas.json` | the default command broker, counties and their IATA codes |
 | `data/help.json` | the help topics both apps show |
 | `vectors/vectors.json` | fixed inputs and the exact outputs: envelopes, results, token, registration, the checks before signing, the mesh road |
-| `vectors/mcc3-vectors.json` | mcc3: keys, commands, results, mesh requests and responses, forwards and their results, alive, and the refusals, byte for byte |
+| `vectors/mcc3-vectors.json` | mcc3: keys, commands, results, mesh requests and responses, forwards and their results, a guest forward with the guest key derived from the command key, alive, and the refusals, byte for byte |
 | `vectors/key-backup-vectors.json` | a sealed key backup file and how it opens |
-| `vectors/malive-vectors.json` | lou-21: the announce of a node without Wi-Fi and the heard entry an Observer node publishes for it, with their keys, opened fields and refusals. Written by the firmware's `scripts/malive-vectors.py` and copied here unchanged |
+| `vectors/malive-vectors.json` | lou-21: the signed announce of a node without Wi-Fi, the `mcc/seen` forwards an Observer node publishes for it, the packets between nodes (state, ack, direct report, path ack) and a guest forward with its result, with their keys, opened fields and refusals. Written by the firmware's `scripts/malive-vectors.py` and copied here unchanged |
 | `MANIFEST.sha256` | SHA-256 of every data and vector file; consumers pin against it |
 
 Every key and seed in the vectors is made from a fixed phrase or a counting byte sequence. None

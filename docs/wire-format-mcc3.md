@@ -19,6 +19,8 @@ upper-case hex characters. The owner's **command key** is the Ed25519 key the no
 | `mcc/r/<RID>` | any login | an exact `RID` only (no `+` or `#`) | 1 | no | a sealed result, or a sealed forward result |
 | `mcc/alive/<KEY>` | that node only | anyone, `mcc/alive/+` allowed | 1 | **yes** | a sealed alive message, or empty |
 | `mcc/ping/<KEY>` | that node only | nobody (the broker answers `pong` on `mcc/cmd/<KEY>`) | 1 | no | `ping\|<8 hex>` |
+| `mcc/seen/<KEY>` | that Observer node only (lou-21) | nobody: the command server reads it | 1 | no | a signed announce the Observer heard, kind `0x53` |
+| `mcc/node/<KEY>` | the command server only | anyone, `mcc/node/+` allowed | 1 | **yes** | the shared node store's entry for that node, kind `0x4E` |
 
 - `RID`, the reply id: 16 random bytes drawn by mccontrol once per broker session, written as 32
   upper-case hex. It travels only inside sealed commands.
@@ -184,7 +186,9 @@ at most 15: the tag says which length is the response.
 A **relay** is a node on MQTT that transmits its owner's mesh request to another node, the
 **target**, and returns the answer over MQTT. The request inside is an ordinary mesh request,
 signed by the owner for the target; the relay cannot read a `0xC2` request or its response. A
-forward runs nothing on the relay. A relay serves only the holder of its own command key.
+forward runs nothing on the relay. With `relay own` a relay serves only the holder of its own
+command key; from lou-21, with `relay any` (the default there), it also takes a **guest forward**
+from anyone (below).
 
 A forward and its result are authenticated by the AEAD under the relay's `K_fwd` alone. They are
 not signed.
@@ -277,6 +281,9 @@ they apply to the request as to any mesh request.
 | 7 | `rate-limited` | no airtime left for now, or a flood limit |
 | 8 | `clock-unset` | the relay has no time yet |
 | 9 | `send-failed` | no packet could be built or queued |
+| 10 | `guest-cap` | a guest forward (lou-21): this guest key has had its floods for the day (`relay.guest`) |
+| 11 | `guests-full` | a guest forward: all guests together have had half the relay's floods for the day, or half its airtime for the quarter hour |
+| 12 | `target-cap` | a guest forward: the target has had its 10 floods from guests for the day |
 
 Their texts for a person are in [results.json](../data/results.json) under `forward`. With
 status 2 and up nothing was sent.
@@ -289,10 +296,65 @@ mesh response.
 mccontrol-cli and mccontrol-web build a forward with a `0xC2` body only, and refuse the relay road
 to a target older than lou-20 before anything is sent.
 
+## A guest forward through someone else's relay (lou-21)
+
+The same forward, sealed so that anyone can make one and only its maker can read the result. It
+carries a **guest key** in clear: an Ed25519 public key the relay has never been given.
+
+```
+guest seed  HKDF-SHA256(command seed, salt empty, info "mcc3/guestkey/"), 32 bytes
+guest key   the Ed25519 public key of that seed
+K_gfwd      HKDF-SHA256(X25519(guest key, relay identity), salt empty, info "mcc3/gfwd/" ‖ relay KEY)
+```
+
+The relay's `KEY` in the info is its 64 upper-case hex characters, as for `mcc3/fwd/`. mccontrol
+derives the guest key again from the command seed each time: it is never stored and never shown,
+and nobody but the owner can link it to the command key. The firmware takes any valid Ed25519 key
+there; the derivation is the tools' choice, fixed here so that both tools agree byte for byte.
+
+| offset | size | field | |
+|---|---|---|---|
+| 0 | 1 | kind `0x47` (`G`) | clear, AAD |
+| 1 | 32 | the guest key | clear, AAD |
+| 33 | 12 | nonce, random | clear, AAD |
+| 45 | 248 | a forward's fields from the counter on: counter, expiry, RID, target, route, path length, path, body length, body | sealed with `K_gfwd` |
+| 293 | 16 | Poly1305 tag | |
+
+**309 bytes, 412 characters.** The result is an ordinary forward result (kind `0x66`) sealed
+under `K_gfwd`. The relay counts the forward counter per guest key, in a ring of the last 16
+keys; a key pushed out starts again, and the 300 s expiry bounds a replay. It answers `off`
+unless `relay` is `any`, and refuses with 10 to 12 when the caps of the relay settings are spent.
+
+## The shared node store (lou-21)
+
+A node without Wi-Fi floods a **signed announce** of 165 bytes (protocol.md 12.4). Any lou-21
+Observer node that hears one whose signature verifies publishes it once on `mcc/seen/<its KEY>`:
+
+`b64url( 0x53 ‖ the announce's bytes 1..164 ‖ SNR i8, quarter dB ‖ hops u8 ‖ via u8 )`, 168
+bytes, 224 characters; via 0 a zero-hop state packet, 1 direct along a path, 2 a flood.
+
+The command server checks the node's signature, keeps the newest announce per node by
+`(boot, sequence)` with the first 4 Observers to report it and the 4 of the announce before, and
+publishes, retained, on `mcc/node/<node KEY>`:
+
+`b64url( 0x4E ‖ the announce's bytes 1..164 ‖ count u8 ‖ count × ( Observer key 32 ‖ arrival
+u32, the server's clock ‖ SNR i8 ‖ hops u8 ‖ via u8 ‖ list u8, 0 current, 1 previous ) )`,
+166 bytes and 40 a catcher.
+
+The owner reads `mcc/node/+`: the owner tag with its own command key, then the signature, then the
+seal; the rest is someone else's. The Observers in an entry are the relays that can reach that node.
+
 ## Relay settings
 
-- `set relay off|own`, `get relay`. Default `own`, on Observer images with the plane;
-  other images do not know the setting. An ordinary command: not on the deny list.
+- `set relay any|own|off`, `get relay`. Default `own` on lou-20 and `any` from lou-21, on
+  Observer images with the plane; other images do not know the setting. An ordinary command:
+  not on the deny list. On the wire (`/mqttcontrol`) own is 0, off 1, any 2.
+- `set relay.guest <0-100>`, `get relay.guest` (lou-21): the floods a day one guest key may have,
+  default 10. All guests together have at most half the relay's floods (50 of 100) and are
+  admitted only while less than half of the current quarter hour's airtime is spent; each target
+  has at most 10 floods a day from guests. Counted in RAM, again at midnight UTC and at a restart.
+  A guest forward never takes the last of the four arrival places, and the owner's forward waits
+  behind a held guest forward instead of being refused `busy`.
 - `get relay` answers `> own, forwarded <n>, answered <n>, refused <n>, <idle|burst|cooldown>,
   <s.s> s airtime left, floods today <n> of 100`, or `> off`.
 - Fixed: one forward waiting at a time, a 120 s wait, a 300 s expiry window, and the budget:
@@ -378,6 +440,7 @@ will: offline. A higher `(boot counter, sequence)` replaces a lower one.
 | `mesh_responses` | a sealed mesh response |
 | `forwards` | F1 (direct, no hops, V3z as its body) and F2 (a flood, a `0xC1` body of 81 bytes, which a lou-20 relay sends and a relay from lou-21 answers `bad-body`): every field, the payload, and what the relay opens. The node of the vectors is the relay, the second node the target |
 | `forward_results` | F3 (answered, V4 as its response) and F4 (no answer, a taught path) |
+| `guest_forwards` | G1: the owner's guest key from the command seed, `S` with the relay, `K_gfwd`, a guest forward through the second node to the node, what the relay opens, and a `guest-cap` result |
 | `alive` | two alive messages and their opened fields |
 | `refusals` | a bit flipped in each region of each message, flags that are refused, the wrong node, the wrong owner, the wrong road in the signature, a replay, a forward's body, route, path and target rules, with the outcome |
 | `not_built` | commands a sender must refuse before signing |
@@ -386,7 +449,7 @@ will: offline. A higher `(boot counter, sequence)` replaces a lower one.
 
 From lou-20 the plane's settings are `cmd` (`set cmd on [<host>]|off`, `get cmd`), `cmd.pubkey`,
 `cmd.slot`, `cmd.mesh`, `cmd.debug`, `cmd ping`, and relaying is `relay` (`set relay off|own`,
-`get relay`). The names before lou-20 (`mqtt.cmd.*`, `mqtt.relay`) are unknown to it; nodes on
+`get relay`; lou-21 adds `any` and `relay.guest`). The names before lou-20 (`mqtt.cmd.*`, `mqtt.relay`) are unknown to it; nodes on
 lou-19 and older know only those. Stored settings carry over unchanged: the names are not stored.
 
 The mesh road admits `time <epoch>` (ten digits): the node steps its clock forward to it when the
